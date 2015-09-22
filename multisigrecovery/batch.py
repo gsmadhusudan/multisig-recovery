@@ -1,10 +1,16 @@
 from pycoin.tx import Tx, pay_to, Spendable
+from pycoin.serialize import b2h, b2h_rev, h2b, h2b_rev
+from pycoin.merkle import merkle
+from pycoin.encoding import double_sha256
+from pycoin.convention import tx_fee, satoshi_to_mbtc
+from pycoin.networks import address_prefix_for_netcode
+from pycoin.services import spendables_for_address, get_tx_db
+
 import json
 import multisigcore
 import multisigcore.oracle
 import sys
 from . import cosign
-
 
 def full_leaf_path(account_path, leaf_path):
 	return '/%s/%s' % (account_path.strip('/'), leaf_path.strip('/'))
@@ -27,12 +33,17 @@ class Batch(object):
 		self.original_master_xpubs = original_master_xpubs
 		self.destination_master_xpubs = destination_master_xpubs
 		self.batchable_txs = batchable_txs
-		self.merkle_root = merkle_root or self._merkle_root()
+		self.merkle_root = merkle_root
 		self.total_out = total_out or sum([batchable_tx.total_out() for batchable_tx in batchable_txs])
 		self.checksum = checksum or -1  # todo - checksum
 
-	def _merkle_root(self):  # todo - real merkle root
-		return hash(','.join(sorted([batchable_tx.as_hex() for batchable_tx in self.batchable_txs])))
+	def build_merkle_root(self):
+		# shouldn't get called without transactions
+		if not len(self.batchable_txs):
+			return None
+		else:
+			return b2h_rev(merkle(sorted([tx.hash() for tx in self.batchable_txs]), double_sha256))
+
 
 	def to_file(self, file_path):
 		data = {
@@ -47,15 +58,40 @@ class Batch(object):
 			json.dump(data, fp)
 
 	def validate(self, provider=None):
+		if self.merkle_root != self.build_merkle_root():
+			raise ValueError("calculated merkle_root %s does not match stated merkle_root %s from header" % (self.build_merkle_root(), self.merkle_root))
+
+		self.total_out = 0
 		if provider is not None:
 			print "Doing full, online validation."
+			self.total_in = 0
+			self.total_fee = 0
 		else:
 			print "Doing limited, offline validation."
-		if False:  # todo - validate header
-			raise ValueError('%s did not pass validation', repr(self))
-		for batchable_tx in self.batchable_txs:
-			batchable_tx.validate()
-		print '! validation not implemented'
+
+		print "Validating %d transactions" % len(self.batchable_txs)
+		for tx_index, tx in enumerate(self.batchable_txs):
+			print "\n\nValidating tx#%d - %s" % (tx_index+1, tx.id())
+			print "- Total out", tx.total_out()
+			self.total_out += tx.total_out()
+			if provider:
+				print "Fetching %d UTXO..." % len(tx.txs_in)
+				for idx, tx_in in enumerate(tx.txs_in):
+					unspent_tx = provider.get_tx(tx_in.previous_hash)
+					tx.unspents.append(unspent_tx.txs_out[tx_in.previous_index])
+
+				print "- Total in", tx.total_in()
+				self.total_in += tx.total_in()
+
+				print "- Fee", tx.fee()
+				self.total_fee += tx.fee()
+
+				print "- Transaction Size", len(tx.as_hex())
+				print "- Recommended Fee for Size ", tx_fee.recommended_fee_for_tx(tx)
+				if tx.fee() > 100000 and tx.fee() > 2 * tx_fee.recommended_fee_for_tx(tx):
+					raise ValueError("Very high fee in transaction %s" % tx.id())
+				print "- Fee Percent", (tx.fee() * 100.00 / tx.total_out())
+				print "- Bad Signatures", tx.bad_signature_count(), "of", len(tx.txs_in)
 
 	def sign(self, master_private_key):  # todo - test to see if this needs to be cached to FS when signing 100k txs
 		for tx_i, batchable_tx in enumerate(self.batchable_txs):
@@ -64,7 +100,6 @@ class Batch(object):
 				print 'signed: %s' % batchable_tx.id()
 			except Exception as err:
 				print '! could not sign tx %s, skipping' % batchable_tx.id(), err
-		self.merkle_root = self._merkle_root()
 
 	def broadcast(self, provider):  # todo - broadcasting status will need to be cached to FS + checking blockchain until all txs pushed
 		for batchable_tx in self.batchable_txs:
@@ -107,10 +142,3 @@ class BatchableTx(Tx):
 			'input_paths': self.input_paths,
 			'output_paths': self.output_paths,
 		}
-
-	def validate(self):
-		# verify output chain paths against master xpubs
-		# input txs to be valid and
-		# match hashes in tx[bytes]
-		if False:  # todo - validate tx
-			raise ValueError('%s did not pass validation' % repr(self))
