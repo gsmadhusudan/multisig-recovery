@@ -88,8 +88,6 @@ def create(args):
 	destination_branch = Branch(destination_key_sources, account_template=__get_template(args.destination_template), provider=insight)
 	cached_recovery = CachedRecovery(origin_branch, destination_branch, provider=insight, leaf_gap=args.leaf_gap, account_gap=args.account_gap)
 	if args.accounts:
-		if args.account_gap is not None:
-			raise ScriptInputError('When you specify known accounts using --acounts then --account-gap cannot be used (no account search will be performed, gap useless).')
 		__add_known_accounts(cached_recovery, args.accounts)
 
 	# recovery
