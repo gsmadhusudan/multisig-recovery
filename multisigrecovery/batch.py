@@ -23,6 +23,8 @@ class Batch(object):
 		with open(file_path, 'r') as fp:
 			data = json.load(fp)
 		header = data['header']
+		if header['merkle_root'] is None:
+			raise ValueError('header.merkle_root always has to be present in loaded batch files')
 		return cls(
 			original_master_xpubs=header['original_master_xpubs'], destination_master_xpubs=header['destination_master_xpubs'],
 			merkle_root=header['merkle_root'], total_out=header['total_out'], checksum=header['checksum'],
@@ -33,7 +35,7 @@ class Batch(object):
 		self.original_master_xpubs = original_master_xpubs
 		self.destination_master_xpubs = destination_master_xpubs
 		self.batchable_txs = batchable_txs
-		self.merkle_root = merkle_root
+		self.merkle_root = merkle_root or self.build_merkle_root()  # set merkle_root when creating a new batch
 		self.total_out = total_out or sum([batchable_tx.total_out() for batchable_tx in batchable_txs])
 		self.checksum = checksum or -1  # todo - checksum
 
@@ -43,7 +45,6 @@ class Batch(object):
 			return None
 		else:
 			return b2h_rev(merkle(sorted([tx.hash() for tx in self.batchable_txs]), double_sha256))
-
 
 	def to_file(self, file_path):
 		data = {
@@ -100,6 +101,7 @@ class Batch(object):
 				print 'signed: %s' % batchable_tx.id()
 			except Exception as err:
 				print '! could not sign tx %s, skipping' % batchable_tx.id(), err
+		self.merkle_root = self.build_merkle_root()
 
 	def broadcast(self, provider):  # todo - broadcasting status will need to be cached to FS + checking blockchain until all txs pushed
 		for batchable_tx in self.batchable_txs:
