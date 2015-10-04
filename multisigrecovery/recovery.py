@@ -10,7 +10,7 @@ class CachedRecovery(object):
 	Create a batch of transactions from master branch keys. Will cache each step and pick up where left off.
 	"""
 
-	def __init__(self, origin_branch, destination_branch, provider, account_gap=5, leaf_gap=5, first_account=0):  # todo - increase gaps
+	def __init__(self, origin_branch, destination_branch, provider, account_gap=None, leaf_gap=None, first_account=0):  # todo - increase gaps
 		self.origin_branch = origin_branch
 		self.destination_branch = destination_branch
 		self.cache = Cache(self.origin_branch.id)
