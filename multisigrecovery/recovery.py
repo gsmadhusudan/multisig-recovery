@@ -26,21 +26,21 @@ class CachedRecovery(object):
 		"""
 		Adding known account indexes speeds up recovery.
 		If leafs are specified, these will be the only ones recovered(LEAF_GAP_LIMIT not used).
-		If leafs are not specified, addresses will be recovered using LEAF_GAP_LIMIT.
+		If leafs not specified, addresses will be recovered using LEAF_GAP_LIMIT.
 			batch.add_known_account(0)
 			batch.add_known_account(1, external_leafs=[0,1,2,3,4], internal_leafs=[0,1,2])
 			batch.add_known_account(1, external_leafs={0: "receiving addr 0", 1: "receiving addr 1", ...}, internal_leafs={0: "change addr 0", ...})
 		"""
-		external_leafs = external_leafs or {}
-		internal_leafs = internal_leafs or {}
-		self.known_accounts[int(account_index)] = {  # each branch stored as {leaf_i: None or receiving address, ...} or None
-			0: {int(v): None for v in external_leafs} if type(external_leafs) == list else {int(k): v for k, v in external_leafs.items()},
-			1: {int(v): None for v in internal_leafs} if type(internal_leafs) == list else {int(k): v for k, v in external_leafs.items()},
-		}
+		leafs = {0: None, 1: None}
+		if external_leafs is not None:
+			leafs[0] = {int(v): None for v in external_leafs} if type(external_leafs) == list else {int(k): v for k, v in external_leafs.items()}
+		if internal_leafs is not None:
+			leafs[1] = {int(v): None for v in internal_leafs} if type(internal_leafs) == list else {int(k): v for k, v in external_leafs.items()}
+		self.known_accounts[int(account_index)] = leafs  # each branch stored as {leaf_i: None or receiving address, ...} or None
 		self.account_lookahead = False
 
 	def recover_origin_accounts(self):
-		"""will pick up where left off due to caching"""
+		"""will pick up where left off due to caching (caching part not implemented)"""
 		if not self.account_lookahead:  # accounts already known
 			for account_index, leafs in self.known_accounts.items():
 				existed = self.recover_origin_account(account_index, internal_leafs=leafs[0], external_leafs=leafs[1])
