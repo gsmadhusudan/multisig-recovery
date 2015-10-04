@@ -16,8 +16,8 @@ class CachedRecovery(object):
 		self.cache = Cache(self.origin_branch.id)
 		self.known_accounts = {}
 		self.tx_db = TxDb(lookup_methods=[provider.get_tx], read_only_paths=[],	writable_cache_path='./cache/tx_db')
-		self.account_gap = account_gap
-		self.leaf_gap = leaf_gap
+		self.account_gap = int(account_gap) if account_gap is not None else None
+		self.leaf_gap = int(leaf_gap) if leaf_gap is not None else None
 		self.first_account = first_account
 		self.account_lookahead = True
 		self.total_to_recover = 0
